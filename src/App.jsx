@@ -732,7 +732,7 @@ export default function CEISDocIntel() {
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "#F8F6F3", borderBottom: `1px solid ${B.border}` }}>
-                      {["File", "Matched To", "Type", "Confidence", "Key Data"].map(h => (
+                      {["File", "Matched To", "Type"].map(h => (
                         <th key={h} style={{ padding: "10px 14px", textAlign: "left", fontSize: "11px", color: B.textLight, letterSpacing: "1.5px", textTransform: "uppercase", fontWeight: "600" }}>{h}</th>
                       ))}
                     </tr>
@@ -740,7 +740,7 @@ export default function CEISDocIntel() {
                   <tbody>
                     {docs.map((doc, i) => (
                       <tr key={doc.id} style={{ borderBottom: i < docs.length-1 ? `1px solid ${B.border}` : "none" }}>
-                        <td style={{ padding: "10px 14px", fontSize: "12px", color: B.text, maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={doc.name}>
+                        <td style={{ padding: "10px 14px", fontSize: "12px", color: B.text, maxWidth: "260px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={doc.name}>
                           {fileIcon(doc.name)} {doc.name}
                         </td>
                         <td style={{ padding: "10px 14px", fontSize: "12px" }}>
@@ -753,41 +753,6 @@ export default function CEISDocIntel() {
                             {doc.source === "excel-parsed" && <span style={{ background: "#EFF7F2", color: B.green, padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📊 excel parsed</span>}
                             {doc.source === "ocr-parsed" && <span style={{ background: "#EEF3FE", color: "#3B5BDB", padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>🔍 ocr parsed</span>}
                           </div>
-                        </td>
-                        <td style={{ padding: "10px 14px" }}>
-                          {doc.cls && (
-                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <div style={{ width: "60px", height: "5px", background: B.border, borderRadius: "3px", overflow: "hidden" }}>
-                                  <div style={{ width: doc.cls.confidence+"%", height: "100%", background: doc.cls.confidence>=75 ? B.green : doc.cls.confidence>=45 ? B.orange : B.red, transition: "width 0.5s ease" }} />
-                                </div>
-                                <span style={{
-                                  fontSize: "11px", fontWeight: "700",
-                                  color: doc.cls.confidence>=75 ? B.green : doc.cls.confidence>=45 ? B.amber : B.red
-                                }}>
-                                  {doc.cls.confidence}%
-                                </span>
-                                <span style={{
-                                  fontSize: "10px", padding: "1px 6px", borderRadius: "3px", fontWeight: "600",
-                                  background: doc.cls.confidence>=75 ? B.greenBg : doc.cls.confidence>=45 ? "#FFF8EE" : B.redBg,
-                                  color: doc.cls.confidence>=75 ? B.green : doc.cls.confidence>=45 ? B.amber : B.red
-                                }}>
-                                  {doc.cls.confidenceLabel}
-                                </span>
-                              </div>
-                              <div style={{ fontSize: "10px", color: B.textLight }}>
-                                {doc.cls.anchorHits} anchor hit{doc.cls.anchorHits !== 1 ? "s" : ""}
-                                {doc.cls.runnerUp && (
-                                  <span title={`Runner-up: ${doc.cls.runnerUp}`} style={{ marginLeft: "6px", color: "#c8a050", cursor: "help" }}>
-                                    ⚠ ambiguous
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </td>
-                        <td style={{ padding: "10px 14px", fontSize: "11px", color: B.orange, fontWeight: "600" }}>
-                          {Object.entries(doc.meta).map(([k,v]) => `${k}: ${v}`).join(" · ") || "—"}
                         </td>
                       </tr>
                     ))}
