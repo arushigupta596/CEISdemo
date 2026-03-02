@@ -1,5 +1,13 @@
 import { useState, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
+import * as pdfjsLib from "pdfjs-dist";
+import { createWorker } from "tesseract.js";
+
+// Point PDF.js to its worker bundle
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.js",
+  import.meta.url
+).toString();
 
 const INVENTORY = {
   CRE: {
@@ -152,27 +160,66 @@ export default function CEISDocIntel() {
   const [tab, setTab]             = useState("upload");
   const [processing, setProcessing] = useState(false);
   const [dragOver, setDragOver]   = useState(false);
+  const [ocrProgress, setOcrProgress] = useState({});
   const fileInputRef = useRef();
 
+  // OCR a single PDF page canvas → text string
+  const ocrCanvas = async (canvas, worker) => {
+    const { data: { text } } = await worker.recognize(canvas);
+    return text;
+  };
+
+  // Render PDF pages to canvas and OCR each one
+  const extractPdfText = async (file, onProgress) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const numPages = pdf.numPages;
+      const worker = await createWorker("eng");
+      let fullText = "";
+
+      for (let i = 1; i <= numPages; i++) {
+        onProgress && onProgress(i, numPages);
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 }); // higher scale = better OCR
+        const canvas = document.createElement("canvas");
+        canvas.width  = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d");
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const pageText = await ocrCanvas(canvas, worker);
+        fullText += pageText + "\n";
+      }
+
+      await worker.terminate();
+      return fullText || file.name;
+    } catch (err) {
+      console.warn("PDF OCR failed for", file.name, err);
+      return file.name; // graceful fallback
+    }
+  };
+
   // Read a File object → plain text content
-  const readFileContent = (file) => {
-    return new Promise((resolve) => {
+  const readFileContent = (file, onProgress) => {
+    return new Promise(async (resolve) => {
+      const isPdf   = file.name.endsWith(".pdf");
       const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv");
       const isText  = file.name.endsWith(".txt")  || file.name.endsWith(".md");
 
-      if (isExcel && file instanceof File) {
+      if (isPdf && file instanceof File) {
+        const text = await extractPdfText(file, onProgress);
+        resolve(text);
+      } else if (isExcel && file instanceof File) {
         const reader = new FileReader();
         reader.onload = (e) => {
           try {
             const wb = XLSX.read(e.target.result, { type: "array" });
-            // Extract all text from all sheets
-            const text = wb.SheetNames.map(name => {
-              const sheet = wb.Sheets[name];
-              return XLSX.utils.sheet_to_csv(sheet);
-            }).join("\n");
+            const text = wb.SheetNames.map(name =>
+              XLSX.utils.sheet_to_csv(wb.Sheets[name])
+            ).join("\n");
             resolve(text);
           } catch {
-            resolve(file.name); // fallback to filename
+            resolve(file.name);
           }
         };
         reader.onerror = () => resolve(file.name);
@@ -180,10 +227,10 @@ export default function CEISDocIntel() {
       } else if (isText && file instanceof File) {
         const reader = new FileReader();
         reader.onload = (e) => resolve(e.target.result || file.name);
-        reader.onerror = () => resolve(file.name);
+        reader.onerror  = () => resolve(file.name);
         reader.readAsText(file);
       } else {
-        // PDF / DOCX / demo objects — use pre-supplied content or filename
+        // DOCX / demo objects — use pre-supplied content or filename
         resolve(file.content || file.name);
       }
     });
@@ -191,20 +238,28 @@ export default function CEISDocIntel() {
 
   const analyze = async (rawFiles) => {
     setProcessing(true);
+    setOcrProgress({});
     const processed = await Promise.all(
       rawFiles.map(async (f) => {
-        const content = await readFileContent(f);
+        const isPdf = f.name && f.name.endsWith(".pdf");
+        const onProgress = isPdf
+          ? (page, total) => setOcrProgress(prev => ({ ...prev, [f.name]: { page, total } }))
+          : null;
+        const content = await readFileContent(f, onProgress);
+        const source = isPdf ? "ocr-parsed"
+          : (f.name.endsWith(".xlsx") || f.name.endsWith(".xls")) ? "excel-parsed"
+          : "filename";
         return {
           id: Math.random().toString(36).slice(2),
-          name: f.name,
-          size: f.size,
+          name: f.name, size: f.size,
           cls:  classifyFile(f.name, content),
           meta: extractMeta(f.name, content),
-          source: (f.name.endsWith(".xlsx") || f.name.endsWith(".xls")) ? "excel-parsed" : "filename",
+          source,
         };
       })
     );
     setDocs(processed);
+    setOcrProgress({});
     setProcessing(false);
     setTab("report");
   };
@@ -321,11 +376,37 @@ export default function CEISDocIntel() {
             </div>
 
             {processing && (
-              <div style={{ marginTop: "20px", background: "#fff", border: `1px solid ${B.border}`, borderRadius: "6px", padding: "20px", textAlign: "center" }}>
-                <div style={{ fontSize: "13px", color: B.orange, letterSpacing: "1px", fontWeight: "600", marginBottom: "10px" }}>Classifying documents...</div>
-                <div style={{ height: "4px", background: B.border, borderRadius: "2px", overflow: "hidden" }}>
-                  <div style={{ height: "100%", width: "55%", background: B.orange, borderRadius: "2px", animation: "slide 1.2s ease-in-out infinite" }} />
+              <div style={{ marginTop: "20px", background: "#fff", border: `1px solid ${B.border}`, borderRadius: "6px", padding: "20px" }}>
+                <div style={{ fontSize: "13px", color: B.orange, fontWeight: "600", marginBottom: "14px" }}>
+                  Processing documents — PDFs are being OCR&apos;d, this may take a moment...
                 </div>
+                {files.map((f) => {
+                  const prog = ocrProgress[f.name];
+                  const isPdf = f.name && f.name.endsWith(".pdf");
+                  const isExcel = f.name && (f.name.endsWith(".xlsx") || f.name.endsWith(".xls"));
+                  return (
+                    <div key={f.name} style={{ marginBottom: "12px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "12px", color: B.textMid }}>{fileIcon(f.name)} {f.name}</span>
+                        <span style={{ fontSize: "11px", color: B.textLight, fontStyle: "italic" }}>
+                          {isPdf
+                            ? prog ? `OCR · page ${prog.page} of ${prog.total}` : "initialising OCR..."
+                            : isExcel ? "parsing cells..." : "reading..."}
+                        </span>
+                      </div>
+                      <div style={{ height: "4px", background: B.border, borderRadius: "2px", overflow: "hidden" }}>
+                        <div style={{
+                          height: "100%",
+                          width: isPdf && prog ? `${Math.round((prog.page / prog.total) * 100)}%` : "100%",
+                          background: isPdf ? B.orange : B.green,
+                          borderRadius: "2px",
+                          transition: "width 0.4s ease",
+                          animation: (!isPdf || !prog) ? "slide 1.2s ease-in-out infinite" : "none"
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
@@ -425,7 +506,8 @@ export default function CEISDocIntel() {
                         <td style={{ padding: "10px 14px" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
                             {doc.cls && <span style={{ background: "#FEF3EE", color: B.orange, padding: "2px 8px", borderRadius: "3px", fontSize: "11px", fontWeight: "600", display: "inline-block" }}>{doc.cls.loanType}</span>}
-                            {doc.source === "excel-parsed" && <span style={{ background: "#EFF7F2", color: B.green, padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📊 content parsed</span>}
+                            {doc.source === "excel-parsed" && <span style={{ background: "#EFF7F2", color: B.green, padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📊 excel parsed</span>}
+                            {doc.source === "ocr-parsed" && <span style={{ background: "#EEF3FE", color: "#3B5BDB", padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>🔍 ocr parsed</span>}
                           </div>
                         </td>
                         <td style={{ padding: "10px 14px" }}>
