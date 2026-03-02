@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import * as XLSX from "xlsx";
 
 const INVENTORY = {
   CRE: {
@@ -153,34 +154,74 @@ export default function CEISDocIntel() {
   const [dragOver, setDragOver]   = useState(false);
   const fileInputRef = useRef();
 
-  const analyze = (rawFiles) => {
+  // Read a File object → plain text content
+  const readFileContent = (file) => {
+    return new Promise((resolve) => {
+      const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv");
+      const isText  = file.name.endsWith(".txt")  || file.name.endsWith(".md");
+
+      if (isExcel && file instanceof File) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const wb = XLSX.read(e.target.result, { type: "array" });
+            // Extract all text from all sheets
+            const text = wb.SheetNames.map(name => {
+              const sheet = wb.Sheets[name];
+              return XLSX.utils.sheet_to_csv(sheet);
+            }).join("\n");
+            resolve(text);
+          } catch {
+            resolve(file.name); // fallback to filename
+          }
+        };
+        reader.onerror = () => resolve(file.name);
+        reader.readAsArrayBuffer(file);
+      } else if (isText && file instanceof File) {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result || file.name);
+        reader.onerror = () => resolve(file.name);
+        reader.readAsText(file);
+      } else {
+        // PDF / DOCX / demo objects — use pre-supplied content or filename
+        resolve(file.content || file.name);
+      }
+    });
+  };
+
+  const analyze = async (rawFiles) => {
     setProcessing(true);
-    setTimeout(() => {
-      const processed = rawFiles.map(f => ({
-        id: Math.random().toString(36).slice(2),
-        name: f.name, size: f.size,
-        cls: classifyFile(f.name, f.content || f.name),
-        meta: extractMeta(f.name, f.content || f.name),
-      }));
-      setDocs(processed);
-      setProcessing(false);
-      setTab("report");
-    }, 900);
+    const processed = await Promise.all(
+      rawFiles.map(async (f) => {
+        const content = await readFileContent(f);
+        return {
+          id: Math.random().toString(36).slice(2),
+          name: f.name,
+          size: f.size,
+          cls:  classifyFile(f.name, content),
+          meta: extractMeta(f.name, content),
+          source: (f.name.endsWith(".xlsx") || f.name.endsWith(".xls")) ? "excel-parsed" : "filename",
+        };
+      })
+    );
+    setDocs(processed);
+    setProcessing(false);
+    setTab("report");
   };
 
   const handleDrop = useCallback((e) => {
     e.preventDefault(); setDragOver(false);
     const dropped = Array.from(e.dataTransfer.files);
     if (!dropped.length) return;
-    const enriched = dropped.map(f => ({ name: f.name, size: f.size, content: f.name }));
-    setFiles(enriched); analyze(enriched);
+    setFiles(dropped);
+    analyze(dropped);
   }, []);
 
   const handleSelect = (e) => {
     const sel = Array.from(e.target.files);
     if (!sel.length) return;
-    const enriched = sel.map(f => ({ name: f.name, size: f.size, content: f.name }));
-    setFiles(enriched); analyze(enriched);
+    setFiles(sel);
+    analyze(sel);
   };
 
   const runDemo = () => { setFiles(DEMO_FILES); analyze(DEMO_FILES); };
@@ -382,7 +423,10 @@ export default function CEISDocIntel() {
                                    : <span style={{ color: B.red, fontSize: "11px", fontWeight: "600" }}>UNCLASSIFIED</span>}
                         </td>
                         <td style={{ padding: "10px 14px" }}>
-                          {doc.cls && <span style={{ background: "#FEF3EE", color: B.orange, padding: "2px 8px", borderRadius: "3px", fontSize: "11px", fontWeight: "600" }}>{doc.cls.loanType}</span>}
+                          <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
+                            {doc.cls && <span style={{ background: "#FEF3EE", color: B.orange, padding: "2px 8px", borderRadius: "3px", fontSize: "11px", fontWeight: "600", display: "inline-block" }}>{doc.cls.loanType}</span>}
+                            {doc.source === "excel-parsed" && <span style={{ background: "#EFF7F2", color: B.green, padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📊 content parsed</span>}
+                          </div>
                         </td>
                         <td style={{ padding: "10px 14px" }}>
                           {doc.cls && (
