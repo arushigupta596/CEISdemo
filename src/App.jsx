@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from "react";
 import * as XLSX from "xlsx";
 import * as pdfjsLib from "pdfjs-dist";
 import { createWorker } from "tesseract.js";
+import mammoth from "mammoth";
 
 // Point PDF.js to its worker bundle
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -356,6 +357,115 @@ function extractMeta(fileName, content) {
   return meta;
 }
 
+// ── CEIS Template Field Definitions ─────────────────────────────────────────
+// Each doc type has a list of required fields. Each field has:
+//   label       — human-readable name shown in disparity report
+//   patterns    — regex/string patterns to detect presence in extracted text
+//   required    — whether absence is a disparity (vs. advisory)
+const TEMPLATE_FIELDS = {
+  // Annual Review / Credit Analysis
+  cre_credit_proposal: [
+    { label: "Borrower Name",            required: true,  patterns: ["borrower"] },
+    { label: "Loan Number",              required: true,  patterns: ["loan #", "loan number", "loan no"] },
+    { label: "Outstanding Balance",      required: true,  patterns: ["outstanding", "book balance", "balance"] },
+    { label: "Purpose",                  required: true,  patterns: ["purpose", "acquisition", "refinance", "equity recapture"] },
+    { label: "Note Date",                required: true,  patterns: ["note date", "origination date"] },
+    { label: "Maturity Date",            required: true,  patterns: ["maturity", "maturity date"] },
+    { label: "Current Rate",             required: true,  patterns: ["current rate", "interest rate", "wsjp", "prime", "fixed rate", "% fixed", "% floating"] },
+    { label: "Amortization",             required: true,  patterns: ["amortization", "i/o", "term/amo", "amort"] },
+    { label: "Pay History (TTM)",        required: true,  patterns: ["pay history", "payment history", "ttm", "as agreed", "delinquency"] },
+    { label: "Risk / Credit Grade",      required: true,  patterns: ["risk grade", "credit grade", "grade", "rating", "pass", "special mention", "substandard", "doubtful"] },
+    { label: "DSCR / Debt Service Coverage", required: true, patterns: ["dscr", "debt service coverage", "debt coverage", "dsc"] },
+    { label: "LTV",                      required: true,  patterns: ["ltv", "loan to value", "loan-to-value"] },
+    { label: "NOI / Net Operating Income", required: false, patterns: ["noi", "net operating income"] },
+    { label: "Guarantor Information",    required: true,  patterns: ["guarantor", "recourse", "personal guarantee"] },
+    { label: "Collateral Description",   required: true,  patterns: ["collateral", "property", "security"] },
+    { label: "Covenant Compliance",      required: false, patterns: ["covenant", "compliance", "minimum dscr", "financial covenant"] },
+    { label: "Analysis / Commentary",    required: true,  patterns: ["analysis", "comment", "discussion", "narrative"] },
+    { label: "Recommendation / Conclusion", required: true, patterns: ["recommend", "conclusion", "concur", "approve"] },
+  ],
+  ci_credit_proposal: [
+    { label: "Borrower Name",            required: true,  patterns: ["borrower"] },
+    { label: "Loan Number",              required: true,  patterns: ["loan #", "loan number", "loan no"] },
+    { label: "Outstanding Balance",      required: true,  patterns: ["outstanding", "book balance", "balance"] },
+    { label: "Purpose",                  required: true,  patterns: ["purpose", "working capital", "equipment", "acquisition"] },
+    { label: "Current Rate",             required: true,  patterns: ["current rate", "interest rate", "prime", "sofr", "% fixed"] },
+    { label: "Pay History (TTM)",        required: true,  patterns: ["pay history", "payment history", "ttm", "as agreed"] },
+    { label: "Risk / Credit Grade",      required: true,  patterns: ["risk grade", "credit grade", "grade", "pass", "special mention", "substandard"] },
+    { label: "Global Cash Flow / DSCR",  required: true,  patterns: ["global cash flow", "dscr", "debt service", "global dsc", "gdscr"] },
+    { label: "Collateral Description",   required: true,  patterns: ["collateral", "ucc", "security interest", "pledge"] },
+    { label: "Financial Analysis",       required: true,  patterns: ["financial analysis", "financial review", "income", "revenue", "ebitda"] },
+    { label: "Guarantor Information",    required: false, patterns: ["guarantor", "recourse", "personal guarantee"] },
+    { label: "Covenant Compliance",      required: false, patterns: ["covenant", "compliance", "financial covenant"] },
+    { label: "Analysis / Commentary",    required: true,  patterns: ["analysis", "comment", "discussion", "narrative"] },
+  ],
+  // Rent Roll
+  cre_rent_roll: [
+    { label: "Property Address",         required: true,  patterns: ["address", "property", "street", "suite"] },
+    { label: "Tenant Names",             required: true,  patterns: ["tenant", "lessee", "occupant"] },
+    { label: "Lease Expiry / Term",      required: true,  patterns: ["lease expiry", "expiration", "lease term", "lease end", "lease date"] },
+    { label: "Monthly / Annual Rent",    required: true,  patterns: ["rent", "monthly rent", "annual rent", "base rent", "$/sf", "per sq"] },
+    { label: "Occupancy Rate",           required: true,  patterns: ["occupancy", "vacant", "leased", "% occupied"] },
+    { label: "Square Footage",           required: false, patterns: ["sq ft", "square feet", "sf", "sqft", "nsf", "rsf"] },
+  ],
+  // PFS / Personal Financial Statement
+  cre_guarantor_fin: [
+    { label: "Guarantor Name",           required: true,  patterns: ["name", "guarantor", "individual"] },
+    { label: "Total Assets",             required: true,  patterns: ["total assets", "assets"] },
+    { label: "Total Liabilities",        required: true,  patterns: ["total liabilities", "liabilities"] },
+    { label: "Net Worth",                required: true,  patterns: ["net worth", "total net worth"] },
+    { label: "Liquid Assets / Cash",     required: true,  patterns: ["liquid", "cash", "checking", "savings", "money market"] },
+    { label: "Real Estate Owned",        required: false, patterns: ["real estate", "property owned", "oreo", "reo"] },
+    { label: "Date of Statement",        required: true,  patterns: ["date", "as of", "prepared"] },
+  ],
+  // Account / Payment History
+  cre_account_history: [
+    { label: "Loan / Account Number",    required: true,  patterns: ["loan #", "account", "loan number"] },
+    { label: "12-Month Payment Detail",  required: true,  patterns: ["ttm", "12 month", "twelve month", "payment history", "pay history"] },
+    { label: "Delinquency Record",       required: true,  patterns: ["delinquency", "past due", "30 day", "60 day", "90 day", "as agreed", "on time"] },
+    { label: "Outstanding Balance",      required: true,  patterns: ["outstanding", "balance", "principal balance"] },
+  ],
+  // Appraisal
+  cre_appraisal: [
+    { label: "Property Address",         required: true,  patterns: ["address", "subject property", "property location"] },
+    { label: "Appraised Value",          required: true,  patterns: ["appraised value", "as is value", "market value", "estimated value"] },
+    { label: "Appraisal Date",           required: true,  patterns: ["date of value", "effective date", "appraisal date", "as of"] },
+    { label: "Appraiser Name / Firm",    required: true,  patterns: ["appraiser", "firm", "certified", "state certified"] },
+    { label: "Approach to Value",        required: true,  patterns: ["income approach", "sales comparison", "cost approach", "cap rate", "capitalization"] },
+    { label: "Cap Rate",                 required: false, patterns: ["cap rate", "capitalization rate", "overall rate"] },
+    { label: "NOI",                      required: false, patterns: ["noi", "net operating income"] },
+  ],
+  // Covenant Compliance
+  cre_covenant: [
+    { label: "Borrower / Loan Reference",required: true,  patterns: ["borrower", "loan", "facility"] },
+    { label: "Covenant Description",     required: true,  patterns: ["covenant", "financial covenant", "minimum dscr", "maximum ltv", "minimum liquidity"] },
+    { label: "Required Level",           required: true,  patterns: ["required", "minimum", "maximum", "threshold", "covenant level"] },
+    { label: "Actual / Tested Level",    required: true,  patterns: ["actual", "tested", "current", "measured", "calculated"] },
+    { label: "Compliance Status",        required: true,  patterns: ["compliant", "in compliance", "pass", "fail", "breach", "waiver"] },
+    { label: "Test / Report Date",       required: true,  patterns: ["date", "as of", "period", "quarter", "year end"] },
+  ],
+};
+
+// Alias cross-loan-type shared doc types
+TEMPLATE_FIELDS.ci_account_history   = TEMPLATE_FIELDS.cre_account_history;
+TEMPLATE_FIELDS.lev_account_history  = TEMPLATE_FIELDS.cre_account_history;
+TEMPLATE_FIELDS.resi_account_history = TEMPLATE_FIELDS.cre_account_history;
+TEMPLATE_FIELDS.lev_credit_proposal  = TEMPLATE_FIELDS.ci_credit_proposal;
+TEMPLATE_FIELDS.ci_covenant          = TEMPLATE_FIELDS.cre_covenant;
+TEMPLATE_FIELDS.lev_covenant         = TEMPLATE_FIELDS.cre_covenant;
+TEMPLATE_FIELDS.resi_appraisal       = TEMPLATE_FIELDS.cre_appraisal;
+
+// Run disparity check: given a doc type id and extracted text, return field results
+function checkDocxDisparity(docTypeId, text) {
+  const fields = TEMPLATE_FIELDS[docTypeId];
+  if (!fields) return null; // no template defined for this type
+  const t = text.toLowerCase();
+  return fields.map(field => {
+    const found = field.patterns.some(p => t.includes(p.toLowerCase()));
+    return { label: field.label, required: field.required, found };
+  });
+}
+
 const fileIcon = (name) => {
   if (name.endsWith(".pdf")) return "📄";
   if (name.endsWith(".docx") || name.endsWith(".doc")) return "📝";
@@ -448,11 +558,21 @@ export default function CEISDocIntel() {
     return new Promise(async (resolve) => {
       const isPdf   = file.name.endsWith(".pdf");
       const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls") || file.name.endsWith(".csv");
+      const isDocx  = file.name.endsWith(".docx") || file.name.endsWith(".doc");
       const isText  = file.name.endsWith(".txt")  || file.name.endsWith(".md");
 
       if (isPdf && file instanceof File) {
         const text = await extractPdfText(file, onProgress);
         resolve(text);
+      } else if (isDocx && file instanceof File) {
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          resolve(result.value || file.name);
+        } catch (err) {
+          console.warn("Mammoth DOCX extraction failed:", err);
+          resolve(file.name);
+        }
       } else if (isExcel && file instanceof File) {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -474,7 +594,7 @@ export default function CEISDocIntel() {
         reader.onerror  = () => resolve(file.name);
         reader.readAsText(file);
       } else {
-        // DOCX / demo objects — use pre-supplied content or filename
+        // demo objects with pre-supplied content
         resolve(file.content || file.name);
       }
     });
@@ -485,20 +605,26 @@ export default function CEISDocIntel() {
     setOcrProgress({});
     const processed = await Promise.all(
       rawFiles.map(async (f) => {
-        const isPdf = f.name && f.name.endsWith(".pdf");
+        const isPdf  = f.name && f.name.endsWith(".pdf");
+        const isDocx = f.name && (f.name.endsWith(".docx") || f.name.endsWith(".doc"));
+        const isExcel = f.name && (f.name.endsWith(".xlsx") || f.name.endsWith(".xls"));
         const onProgress = isPdf
           ? (page, total) => setOcrProgress(prev => ({ ...prev, [f.name]: { page, total } }))
           : null;
         const content = await readFileContent(f, onProgress);
+        const cls = classifyFile(f.name, content);
+        const disparity = (isDocx && cls && f instanceof File)
+          ? checkDocxDisparity(cls.id, content)
+          : null;
         const source = isPdf ? "ocr-parsed"
-          : (f.name.endsWith(".xlsx") || f.name.endsWith(".xls")) ? "excel-parsed"
+          : isDocx ? "docx-parsed"
+          : isExcel ? "excel-parsed"
           : "filename";
         return {
           id: Math.random().toString(36).slice(2),
           name: f.name, size: f.size,
-          cls:  classifyFile(f.name, content),
-          meta: extractMeta(f.name, content),
-          source,
+          cls, meta: extractMeta(f.name, content),
+          source, disparity,
         };
       })
     );
@@ -627,6 +753,7 @@ export default function CEISDocIntel() {
                 {files.map((f) => {
                   const prog = ocrProgress[f.name];
                   const isPdf = f.name && f.name.endsWith(".pdf");
+                  const isDocx = f.name && (f.name.endsWith(".docx") || f.name.endsWith(".doc"));
                   const isExcel = f.name && (f.name.endsWith(".xlsx") || f.name.endsWith(".xls"));
                   return (
                     <div key={f.name} style={{ marginBottom: "12px" }}>
@@ -635,7 +762,7 @@ export default function CEISDocIntel() {
                         <span style={{ fontSize: "11px", color: B.textLight, fontStyle: "italic" }}>
                           {isPdf
                             ? prog ? `OCR · page ${prog.page} of ${prog.total}` : "initialising OCR..."
-                            : isExcel ? "parsing cells..." : "reading..."}
+                            : isDocx ? "extracting text..." : isExcel ? "parsing cells..." : "reading..."}
                         </span>
                       </div>
                       <div style={{ height: "4px", background: B.border, borderRadius: "2px", overflow: "hidden" }}>
@@ -750,6 +877,7 @@ export default function CEISDocIntel() {
                         <td style={{ padding: "10px 14px" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
                             {doc.cls && <span style={{ background: "#FEF3EE", color: B.orange, padding: "2px 8px", borderRadius: "3px", fontSize: "11px", fontWeight: "600", display: "inline-block" }}>{doc.cls.loanType}</span>}
+                            {doc.source === "docx-parsed" && <span style={{ background: "#F3F0FF", color: "#6741D9", padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📝 docx parsed</span>}
                             {doc.source === "excel-parsed" && <span style={{ background: "#EFF7F2", color: B.green, padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📊 excel parsed</span>}
                             {doc.source === "ocr-parsed" && <span style={{ background: "#EEF3FE", color: "#3B5BDB", padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>🔍 ocr parsed</span>}
                           </div>
@@ -791,6 +919,84 @@ export default function CEISDocIntel() {
                   </div>
                 ))}
               </div>
+
+              {/* DOCX Disparity Panel */}
+              {docs.filter(d => d.disparity && d.disparity.length > 0).length > 0 && (
+                <div style={{ marginTop: "28px" }}>
+                  <p style={{ fontSize: "12px", color: B.textLight, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "10px" }}>
+                    DOCX Field Disparity — Template vs. Extracted Content
+                  </p>
+                  {docs.filter(d => d.disparity && d.disparity.length > 0).map(doc => {
+                    const missing  = doc.disparity.filter(f => !f.found && f.required);
+                    const advisory = doc.disparity.filter(f => !f.found && !f.required);
+                    const present  = doc.disparity.filter(f => f.found);
+                    const pct = Math.round((present.length / doc.disparity.length) * 100);
+                    return (
+                      <div key={doc.id} style={{ background: "#fff", border: `1px solid ${B.border}`, borderRadius: "8px", overflow: "hidden", marginBottom: "16px" }}>
+                        <div style={{ padding: "14px 18px", background: "#F8F6F3", borderBottom: `1px solid ${B.border}`, display: "flex", alignItems: "center", gap: "12px" }}>
+                          <span style={{ fontSize: "16px" }}>📝</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: "13px", fontWeight: "700", color: B.text }}>{doc.name}</div>
+                            <div style={{ fontSize: "11px", color: B.textLight, marginTop: "2px" }}>
+                              Matched as: <span style={{ color: B.green, fontWeight: "600" }}>{doc.cls.label}</span>
+                            </div>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <div style={{ fontSize: "11px", color: B.textLight, marginBottom: "4px" }}>
+                              Field coverage: <span style={{ fontWeight: "700", color: pct >= 80 ? B.green : pct >= 50 ? B.amber : B.red }}>{pct}%</span>
+                            </div>
+                            <div style={{ height: "5px", background: B.border, borderRadius: "3px", overflow: "hidden", width: "120px" }}>
+                              <div style={{ height: "100%", width: pct + "%", background: pct >= 80 ? B.green : pct >= 50 ? B.orange : B.red, transition: "width 0.5s ease" }} />
+                            </div>
+                          </div>
+                        </div>
+                        {missing.length > 0 && (
+                          <div style={{ padding: "12px 18px", borderBottom: `1px solid ${B.border}` }}>
+                            <div style={{ fontSize: "10px", color: B.red, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
+                              ✗ Missing Required Fields ({missing.length})
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                              {missing.map(f => (
+                                <span key={f.label} style={{ padding: "3px 10px", background: B.redBg, border: "1px solid #E8B4B0", borderRadius: "4px", fontSize: "12px", color: B.red, fontWeight: "600" }}>
+                                  {f.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {advisory.length > 0 && (
+                          <div style={{ padding: "12px 18px", borderBottom: `1px solid ${B.border}` }}>
+                            <div style={{ fontSize: "10px", color: B.amber, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
+                              ⚠ Advisory — Optional Fields Not Detected ({advisory.length})
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                              {advisory.map(f => (
+                                <span key={f.label} style={{ padding: "3px 10px", background: "#FFFBF0", border: "1px solid #F0D080", borderRadius: "4px", fontSize: "12px", color: B.amber }}>
+                                  {f.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {present.length > 0 && (
+                          <div style={{ padding: "12px 18px" }}>
+                            <div style={{ fontSize: "10px", color: B.green, fontWeight: "700", letterSpacing: "1px", textTransform: "uppercase", marginBottom: "8px" }}>
+                              ✓ Fields Detected ({present.length})
+                            </div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                              {present.map(f => (
+                                <span key={f.label} style={{ padding: "3px 10px", background: B.greenBg, border: "1px solid #A8D5B8", borderRadius: "4px", fontSize: "12px", color: B.green }}>
+                                  {f.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )
         )}
