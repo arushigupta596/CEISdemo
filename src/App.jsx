@@ -22,7 +22,7 @@ const W1 = 1;  // weak term    — supporting signal, adds confidence if others 
 const INVENTORY = {
   CRE: {
     label: "Commercial Real Estate (CRE)",
-    color: "#E8622A",
+    color: "#1B6CB5",
     items: [
       { id: "cre_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
         ["account history",W3], ["payment history",W3], ["pay history",W3], ["loan history",W2],
@@ -75,7 +75,7 @@ const INVENTORY = {
   },
   CI: {
     label: "Commercial & Industrial (C&I)",
-    color: "#E8622A",
+    color: "#1B6CB5",
     items: [
       { id: "ci_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
         ["account history",W3], ["payment history",W3], ["pay history",W3],
@@ -125,7 +125,7 @@ const INVENTORY = {
   },
   Resi: {
     label: "Residential (Resi)",
-    color: "#E8622A",
+    color: "#1B6CB5",
     items: [
       { id: "resi_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
         ["payment history",W3], ["account history",W3], ["mortgage history",W3],
@@ -213,7 +213,7 @@ const INVENTORY = {
   },
   Leveraged: {
     label: "Leveraged Loan",
-    color: "#E8622A",
+    color: "#1B6CB5",
     items: [
       { id: "lev_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
         ["account history",W3], ["payment history",W3], ["pay history",W3],
@@ -490,16 +490,16 @@ const DEMO_FILES = [
 
 // ── Brand tokens ──────────────────────────────────────────────────────────────
 const B = {
-  orange:    "#E8622A",
-  orangeHov: "#D4551F",
-  oliveBg:   "#4A5240",   // top banner olive/dark green from site
+  orange:    "#1B6CB5",   // CEIS blue (nav links, accents)
+  orangeHov: "#155A9A",
+  oliveBg:   "#2B3A52",   // CEIS dark navy top bar + footer
   navBg:     "#FFFFFF",
-  bodyBg:    "#F4F4F2",
+  bodyBg:    "#F2F4F7",
   cardBg:    "#FFFFFF",
-  border:    "#DDD9D3",
-  text:      "#2C2C2C",
-  textMid:   "#5A5A5A",
-  textLight: "#8A8A8A",
+  border:    "#D8DCE3",
+  text:      "#1A1F2E",
+  textMid:   "#4A5568",
+  textLight: "#718096",
   green:     "#2E7D4F",
   red:       "#C0392B",
   redBg:     "#FDF0EF",
@@ -681,25 +681,32 @@ export default function CEISDocIntel() {
   return (
     <div style={{ fontFamily: "'Arial', 'Helvetica', sans-serif", background: B.bodyBg, minHeight: "100vh", color: B.text }}>
 
-      {/* Olive top bar */}
+      {/* Navy top bar — matches CEIS Review Inc website */}
       <div style={{ background: B.oliveBg, padding: "6px 32px", textAlign: "right" }}>
-        <span style={{ fontSize: "11px", color: "#d4d9cc", letterSpacing: "0.5px" }}>Credit File Document Intelligence System</span>
+        <span style={{ fontSize: "11px", color: "#9AABBD", letterSpacing: "0.5px" }}>Commercial Portfolio Advisors EST 1989</span>
       </div>
 
       {/* White nav bar */}
-      <div style={{ background: B.navBg, borderBottom: `2px solid ${B.border}`, padding: "14px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 1px 4px rgba(0,0,0,0.06)" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-          {/* CEIS logo recreation */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "32px", fontWeight: "900", color: B.orange, letterSpacing: "-1px", fontFamily: "'Arial Black', 'Arial', sans-serif" }}>ceis</span>
-            <div style={{ width: "1px", height: "36px", background: B.border }} />
-            <div style={{ lineHeight: "1.25" }}>
-              <div style={{ fontSize: "10px", color: B.textMid, letterSpacing: "0.5px" }}>Critical Energy</div>
-              <div style={{ fontSize: "10px", color: B.textMid, letterSpacing: "0.5px" }}>Infrastructure</div>
-              <div style={{ fontSize: "10px", color: B.textMid, letterSpacing: "0.5px" }}>Services</div>
+      <div style={{ background: B.navBg, borderBottom: `2px solid ${B.border}`, padding: "14px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", boxShadow: "0 2px 8px rgba(27,42,78,0.08)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          {/* CEIS Review Inc logo — cube icon + wordmark */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {/* Cube icon approximation using nested divs */}
+            <div style={{ position: "relative", width: "48px", height: "48px", flexShrink: 0 }}>
+              <div style={{ position: "absolute", top: "4px", left: "8px", width: "32px", height: "32px", background: "#2B3A52", borderRadius: "3px", transform: "skewX(-8deg)" }} />
+              <div style={{ position: "absolute", top: "0px", left: "14px", width: "26px", height: "26px", background: "#1B6CB5", borderRadius: "3px", transform: "skewX(8deg)" }} />
+              <div style={{ position: "absolute", top: "10px", left: "4px", width: "22px", height: "22px", background: "#3B5E85", borderRadius: "2px", opacity: 0.85 }} />
+            </div>
+            <div style={{ lineHeight: "1.2" }}>
+              <div style={{ fontSize: "18px", fontWeight: "800", color: B.text, letterSpacing: "0.5px", fontFamily: "'Arial', sans-serif" }}>
+                CEIS <span style={{ color: B.orange }}>REVIEW</span> INC.
+              </div>
+              <div style={{ fontSize: "10px", color: B.textLight, letterSpacing: "0.3px", fontStyle: "italic" }}>
+                Commercial Portfolio Advisors EST 1989
+              </div>
             </div>
           </div>
-          <div style={{ width: "1px", height: "36px", background: B.border, marginLeft: "8px" }} />
+          <div style={{ width: "1px", height: "40px", background: B.border, marginLeft: "8px" }} />
           <div>
             <div style={{ fontSize: "11px", color: B.textLight, letterSpacing: "2px", textTransform: "uppercase" }}>Loan Review</div>
             <div style={{ fontSize: "16px", color: B.text, fontWeight: "600", letterSpacing: "0.2px" }}>Document Intelligence</div>
@@ -736,7 +743,7 @@ export default function CEISDocIntel() {
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current.click()}
-              style={{ border: `2px dashed ${dragOver ? B.orange : B.border}`, borderRadius: "6px", padding: "56px 32px", textAlign: "center", cursor: "pointer", background: dragOver ? "#FEF3EE" : "#fff", transition: "all 0.2s" }}
+              style={{ border: `2px dashed ${dragOver ? B.orange : B.border}`, borderRadius: "6px", padding: "56px 32px", textAlign: "center", cursor: "pointer", background: dragOver ? "#EBF3FC" : "#fff", transition: "all 0.2s" }}
             >
               <div style={{ fontSize: "44px", marginBottom: "12px" }}>📂</div>
               <p style={{ fontSize: "18px", color: B.text, margin: "0 0 6px", fontWeight: "600" }}>Drop your loan package files here</p>
@@ -876,7 +883,7 @@ export default function CEISDocIntel() {
                         </td>
                         <td style={{ padding: "10px 14px" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: "3px" }}>
-                            {doc.cls && <span style={{ background: "#FEF3EE", color: B.orange, padding: "2px 8px", borderRadius: "3px", fontSize: "11px", fontWeight: "600", display: "inline-block" }}>{doc.cls.loanType}</span>}
+                            {doc.cls && <span style={{ background: "#EBF3FC", color: B.orange, padding: "2px 8px", borderRadius: "3px", fontSize: "11px", fontWeight: "600", display: "inline-block" }}>{doc.cls.loanType}</span>}
                             {doc.source === "docx-parsed" && <span style={{ background: "#F3F0FF", color: "#6741D9", padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📝 docx parsed</span>}
                             {doc.source === "excel-parsed" && <span style={{ background: "#EFF7F2", color: B.green, padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>📊 excel parsed</span>}
                             {doc.source === "ocr-parsed" && <span style={{ background: "#EEF3FE", color: "#3B5BDB", padding: "2px 8px", borderRadius: "3px", fontSize: "10px", fontWeight: "600", display: "inline-block" }}>🔍 ocr parsed</span>}
@@ -889,7 +896,7 @@ export default function CEISDocIntel() {
               </div>
 
               {/* Inventory Checklist */}
-              <p style={{ fontSize: "12px", color: B.textLight, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "10px" }}>CEIS Inventory Checklist — {loanType}</p>
+              <p style={{ fontSize: "12px", color: B.textLight, letterSpacing: "1px", textTransform: "uppercase", marginBottom: "10px" }}>CEIS Review Inventory Checklist — {loanType}</p>
               <div style={{ background: "#fff", border: `1px solid ${B.border}`, borderRadius: "6px", overflow: "hidden" }}>
                 {inventoryStatus.map((item, i) => (
                   <div key={item.id} style={{ display: "flex", alignItems: "flex-start", gap: "12px", padding: "12px 16px", borderBottom: i < inventoryStatus.length-1 ? `1px solid ${B.border}` : "none", background: item.required && !item.matched ? B.redBg : "transparent" }}>
@@ -1091,8 +1098,8 @@ export default function CEISDocIntel() {
 
       {/* Footer */}
       <div style={{ background: B.oliveBg, marginTop: "48px", padding: "16px 32px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: "12px", color: "#c8cdc2" }}>© CEIS — Critical Energy Infrastructure Services</span>
-        <span style={{ fontSize: "11px", color: "#8a9080", letterSpacing: "1px" }}>DOCUMENT INTELLIGENCE SYSTEM</span>
+        <span style={{ fontSize: "12px", color: "#9AABBD" }}>© CEIS Review Inc. — Commercial Portfolio Advisors EST 1989</span>
+        <span style={{ fontSize: "11px", color: "#5A7090", letterSpacing: "1px" }}>DOCUMENT INTELLIGENCE SYSTEM</span>
       </div>
 
       <style>{`@keyframes slide { 0%{transform:translateX(-100%)} 100%{transform:translateX(280%)} }`}</style>
