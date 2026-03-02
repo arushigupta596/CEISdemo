@@ -9,79 +9,262 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url
 ).toString();
 
+// ── Keyword weights ────────────────────────────────────────────────────────
+// W3 = highly specific / near-unique to this document type (e.g. "rent roll", "1040")
+// W2 = domain-specific but shared across a few types  (e.g. "appraisal", "covenant")
+// W1 = generic financial terms present in many docs   (e.g. "income", "balance sheet")
+const W3 = 3;  // anchor term  — this word almost only appears in this doc type
+const W2 = 2;  // strong term  — meaningfully associated but not unique
+const W1 = 1;  // weak term    — supporting signal, adds confidence if others match
+
+// Each keyword entry is [term, weight]
 const INVENTORY = {
   CRE: {
     label: "Commercial Real Estate (CRE)",
     color: "#E8622A",
     items: [
-      { id: "cre_account_history",   label: "Borrower Account History (outstanding, payments, delinquencies)", required: true,  keywords: ["account history","payment history","pay history","delinquency","outstanding","ttm","as agreed","loan history"] },
-      { id: "cre_credit_proposal",   label: "Original & Latest Bank Credit Proposal / Credit Analysis / Annual Review", required: true,  keywords: ["credit proposal","credit analysis","annual review","underwriting","uw memo","credit memo"] },
-      { id: "cre_committee",         label: "Latest Bank Credit Committee Approval", required: true,  keywords: ["credit committee","committee approval","loan approval","loan committee","approval memo"] },
-      { id: "cre_fin_statements",    label: "Last 3 Years Financial Statements – Borrower (I&E, CTR, management accounts)", required: true,  keywords: ["financial statement","i&e","income expense","ctr","management accounts","fiscal","p&l","profit loss","balance sheet","borrower financials"] },
-      { id: "cre_guarantor_fin",     label: "Guarantor Financials (PFS, PTR, etc.)", required: true,  keywords: ["pfs","personal financial","ptr","personal tax","guarantor","net worth statement"] },
-      { id: "cre_appraisal",         label: "Latest Property Appraisal & Appraisal Review", required: true,  keywords: ["appraisal","valuation","appraised value","cap rate","income approach","sales comp","appraisal review"] },
-      { id: "cre_bank_inspection",   label: "Latest Bank Inspection / Site Visit", required: true,  keywords: ["inspection","site visit","bank inspection","property inspection"] },
-      { id: "cre_rent_roll",         label: "Latest Rent Roll", required: true,  keywords: ["rent roll","tenant schedule","lease schedule","tenancy","tenant list","occupancy"] },
-      { id: "cre_third_party",       label: "Third-Party Rating Inputs", required: false, keywords: ["third party rating","risk rating input","rating agency"] },
-      { id: "cre_covenant",          label: "Covenant Compliance Statement / Waivers / Amendments", required: false, keywords: ["covenant compliance","covenant certificate","compliance statement","waiver","amendment","dscr covenant"] },
+      { id: "cre_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
+        ["account history",W3], ["payment history",W3], ["pay history",W3], ["loan history",W2],
+        ["delinquency",W2], ["delinquencies",W2], ["ttm",W2], ["as agreed",W2], ["outstanding balance",W1],
+      ]},
+      { id: "cre_credit_proposal", label: "Original & Latest Bank Credit Proposal / Credit Analysis / Annual Review", required: true, keywords: [
+        ["annual review",W3], ["credit analysis",W3], ["credit proposal",W3], ["uw memo",W3],
+        ["credit memo",W2], ["underwriting memo",W2], ["underwriting",W1],
+      ]},
+      { id: "cre_committee", label: "Latest Bank Credit Committee Approval", required: true, keywords: [
+        ["credit committee",W3], ["committee approval",W3], ["loan committee",W3],
+        ["loan approval",W2], ["approval memo",W2], ["committee presentation",W2],
+      ]},
+      { id: "cre_fin_statements", label: "Last 3 Years Financial Statements – Borrower (I&E, CTR, management accounts)", required: true, keywords: [
+        ["i&e",W3], ["income & expense",W3], ["income expense",W3], ["management accounts",W3],
+        ["financial statement",W2], ["profit loss",W2], ["p&l",W2], ["ctr",W2],
+        ["balance sheet",W1], ["fiscal",W1], ["net operating income",W1],
+      ]},
+      { id: "cre_guarantor_fin", label: "Guarantor Financials (PFS, PTR, etc.)", required: true, keywords: [
+        ["personal financial statement",W3], ["pfs",W3], ["ptr",W3], ["net worth statement",W3],
+        ["guarantor",W2], ["personal tax return",W2], ["liquid assets",W2],
+        ["total liabilities",W1], ["adjusted net worth",W1],
+      ]},
+      { id: "cre_appraisal", label: "Latest Property Appraisal & Appraisal Review", required: true, keywords: [
+        ["appraisal",W3], ["appraised value",W3], ["cap rate",W3], ["income approach",W3],
+        ["sales comp",W3], ["appraisal review",W3], ["as is value",W2],
+        ["valuation",W2], ["as stabilized",W2], ["mcnerney",W2], ["cushman",W2], ["cbre",W2],
+        ["capitalization rate",W1],
+      ]},
+      { id: "cre_bank_inspection", label: "Latest Bank Inspection / Site Visit", required: true, keywords: [
+        ["bank inspection",W3], ["site visit",W3], ["property inspection",W3],
+        ["inspection report",W2], ["site inspection",W2],
+        ["inspection",W1],
+      ]},
+      { id: "cre_rent_roll", label: "Latest Rent Roll", required: true, keywords: [
+        ["rent roll",W3], ["tenant schedule",W3], ["lease schedule",W3],
+        ["tenant list",W2], ["lease expiry",W2], ["annual rent",W2], ["occupancy",W2],
+        ["tenancy",W1], ["sq ft",W1], ["square feet",W1],
+      ]},
+      { id: "cre_third_party", label: "Third-Party Rating Inputs", required: false, keywords: [
+        ["third party rating",W3], ["risk rating input",W3],
+        ["rating agency",W2], ["third-party report",W2],
+      ]},
+      { id: "cre_covenant", label: "Covenant Compliance Statement / Waivers / Amendments", required: false, keywords: [
+        ["covenant compliance",W3], ["compliance certificate",W3], ["dscr covenant",W3],
+        ["compliance statement",W2], ["covenant waiver",W2], ["covenant amendment",W2],
+        ["waiver",W1], ["amendment",W1], ["minimum dscr",W1],
+      ]},
     ],
   },
   CI: {
     label: "Commercial & Industrial (C&I)",
     color: "#E8622A",
     items: [
-      { id: "ci_account_history",    label: "Borrower Account History (outstanding, payments, delinquencies)", required: true,  keywords: ["account history","payment history","pay history","delinquency","outstanding","ttm","loan history"] },
-      { id: "ci_credit_proposal",    label: "Original & Latest Bank Credit Proposal / Annual Review", required: true,  keywords: ["credit proposal","credit analysis","annual review","underwriting","uw memo","credit memo"] },
-      { id: "ci_committee",          label: "Latest Credit Committee Approval", required: true,  keywords: ["credit committee","committee approval","loan approval","approval memo"] },
-      { id: "ci_collateral_val",     label: "Most Recent Collateral Valuation(s)", required: true,  keywords: ["collateral valuation","collateral value","appraisal","ucc","equipment appraisal"] },
-      { id: "ci_abl_docs",           label: "Field Audit / Receivable Aging / Borrowing Base Certificate (if ABL)", required: false, keywords: ["field audit","receivable aging","a/r aging","borrowing base","bbc","abl"] },
-      { id: "ci_projections",        label: "Financial Projections / Budgets", required: false, keywords: ["projection","budget","pro forma","proforma","forecast"] },
-      { id: "ci_fin_statements",     label: "Last 3 Years Fiscal Financials + Interim Statements (10K, 10Q, CTR)", required: true,  keywords: ["financial statement","10k","10q","ctr","annual","interim","fiscal","income","balance sheet"] },
-      { id: "ci_covenant",           label: "Covenant Compliance Statement / Waivers / Amendments", required: false, keywords: ["covenant compliance","covenant certificate","compliance statement","waiver","amendment"] },
-      { id: "ci_third_party",        label: "Third-Party Rating Inputs", required: false, keywords: ["third party rating","risk rating input","rating agency"] },
-      { id: "ci_info_memo",          label: "Information Memorandum (syndicated deals, past 24 months)", required: false, keywords: ["information memorandum","syndicated","info memo"] },
+      { id: "ci_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
+        ["account history",W3], ["payment history",W3], ["pay history",W3],
+        ["delinquency",W2], ["ttm",W2], ["as agreed",W2], ["loan history",W2],
+        ["outstanding",W1],
+      ]},
+      { id: "ci_credit_proposal", label: "Original & Latest Bank Credit Proposal / Annual Review", required: true, keywords: [
+        ["annual review",W3], ["credit analysis",W3], ["credit proposal",W3],
+        ["uw memo",W3], ["credit memo",W2], ["underwriting",W1],
+      ]},
+      { id: "ci_committee", label: "Latest Credit Committee Approval", required: true, keywords: [
+        ["credit committee",W3], ["committee approval",W3],
+        ["loan approval",W2], ["approval memo",W2],
+      ]},
+      { id: "ci_collateral_val", label: "Most Recent Collateral Valuation(s)", required: true, keywords: [
+        ["collateral valuation",W3], ["equipment appraisal",W3], ["inventory valuation",W3],
+        ["collateral value",W2], ["ucc",W2], ["lien search",W2],
+        ["collateral",W1],
+      ]},
+      { id: "ci_abl_docs", label: "Field Audit / Receivable Aging / Borrowing Base Certificate (if ABL)", required: false, keywords: [
+        ["field audit",W3], ["receivable aging",W3], ["borrowing base certificate",W3], ["bbc",W3],
+        ["a/r aging",W2], ["accounts receivable aging",W2], ["abl",W2], ["borrowing base",W2],
+        ["availability",W1],
+      ]},
+      { id: "ci_projections", label: "Financial Projections / Budgets", required: false, keywords: [
+        ["financial projections",W3], ["cash flow projection",W3], ["pro forma",W3],
+        ["budget",W2], ["proforma",W2], ["forecast",W2],
+        ["projection",W1],
+      ]},
+      { id: "ci_fin_statements", label: "Last 3 Years Fiscal Financials + Interim Statements (10K, 10Q, CTR)", required: true, keywords: [
+        ["10-k",W3], ["10k",W3], ["10-q",W3], ["10q",W3], ["audited financial",W3],
+        ["financial statement",W2], ["interim statement",W2], ["ctr",W2],
+        ["balance sheet",W1], ["income",W1], ["fiscal",W1],
+      ]},
+      { id: "ci_covenant", label: "Covenant Compliance Statement / Waivers / Amendments", required: false, keywords: [
+        ["covenant compliance",W3], ["compliance certificate",W3],
+        ["compliance statement",W2], ["waiver",W2], ["amendment",W1],
+      ]},
+      { id: "ci_third_party", label: "Third-Party Rating Inputs", required: false, keywords: [
+        ["third party rating",W3], ["risk rating input",W3], ["rating agency",W2],
+      ]},
+      { id: "ci_info_memo", label: "Information Memorandum (syndicated deals, past 24 months)", required: false, keywords: [
+        ["information memorandum",W3], ["syndicated loan",W3], ["info memo",W3],
+        ["syndicated",W2], ["lead arranger",W2],
+      ]},
     ],
   },
   Resi: {
     label: "Residential (Resi)",
     color: "#E8622A",
     items: [
-      { id: "resi_account_history",  label: "Borrower Account History (outstanding, payments, delinquencies)", required: true,  keywords: ["account history","payment history","pay history","delinquency","outstanding","ttm"] },
-      { id: "resi_credit_proposal",  label: "Original & Latest Bank Credit Proposal / Annual Review", required: true,  keywords: ["credit proposal","credit analysis","annual review","underwriting","uw memo"] },
-      { id: "resi_committee",        label: "Latest Bank Credit Committee Approval", required: true,  keywords: ["credit committee","committee approval","loan approval","approval memo"] },
-      { id: "resi_fin_statements",   label: "Last 3 Years Financial Statements – Borrower", required: true,  keywords: ["financial statement","income","balance sheet","fiscal","p&l"] },
-      { id: "resi_tax_returns",      label: "Last 3 Years Tax Returns – Borrower", required: true,  keywords: ["tax return","1040","ptr","individual tax","agi","personal tax"] },
-      { id: "resi_credit_reports",   label: "Credit Reports", required: true,  keywords: ["credit report","fico","credit score","equifax","experian","transunion"] },
-      { id: "resi_note_title",       label: "Note and Title", required: true,  keywords: ["promissory note","title","deed of trust","mortgage note","note date","title insurance"] },
-      { id: "resi_appraisal",        label: "Latest Appraisal", required: true,  keywords: ["appraisal","valuation","appraised value","fnma","1004","urar","residential appraisal"] },
-      { id: "resi_closing_docs",     label: "Closing Documents and Checklist", required: true,  keywords: ["closing","hud-1","settlement","closing disclosure","closing checklist"] },
-      { id: "resi_legal_docs",       label: "All Legal Documents", required: true,  keywords: ["legal","mortgage","deed","lien","legal document","security instrument"] },
-      { id: "resi_income_verify",    label: "Verification of Income", required: true,  keywords: ["income verification","w-2","paystub","voe","verification of income","employment verification"] },
-      { id: "resi_liquidity_verify", label: "Verification of Liquidity", required: true,  keywords: ["liquidity","bank statement","asset verification","vod","verification of deposit","liquid assets"] },
-      { id: "resi_re_taxes",         label: "Real Estate Tax / Insurance / Maintenance (subject + OREO)", required: true,  keywords: ["real estate tax","property tax","insurance","maintenance","hazard insurance","oreo"] },
-      { id: "resi_condo",            label: "Condo Approval Information (if applicable)", required: false, keywords: ["condo","condominium","hoa","condo questionnaire"] },
-      { id: "resi_application",      label: "Signed Application", required: true,  keywords: ["application","loan application","1003","uniform residential","signed application","urla"] },
-      { id: "resi_appraisal_review", label: "Appraisal Review", required: true,  keywords: ["appraisal review","review appraisal","desk review","field review"] },
-      { id: "resi_business_returns", label: "3 Years Business Returns (if applicable)", required: false, keywords: ["business return","1120","1065","schedule c","corporate return"] },
-      { id: "resi_leases",           label: "Leases on OREO (if needed)", required: false, keywords: ["lease","oreo lease","rental agreement"] },
+      { id: "resi_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
+        ["payment history",W3], ["account history",W3], ["mortgage history",W3],
+        ["delinquency",W2], ["ttm",W2], ["as agreed",W2],
+      ]},
+      { id: "resi_credit_proposal", label: "Original & Latest Bank Credit Proposal / Annual Review", required: true, keywords: [
+        ["credit proposal",W3], ["annual review",W3], ["credit analysis",W3],
+        ["underwriting",W2], ["uw memo",W2],
+      ]},
+      { id: "resi_committee", label: "Latest Bank Credit Committee Approval", required: true, keywords: [
+        ["credit committee",W3], ["committee approval",W3], ["loan approval",W2], ["approval memo",W2],
+      ]},
+      { id: "resi_fin_statements", label: "Last 3 Years Financial Statements – Borrower", required: true, keywords: [
+        ["financial statement",W2], ["income statement",W2], ["p&l",W2],
+        ["balance sheet",W1], ["fiscal",W1],
+      ]},
+      { id: "resi_tax_returns", label: "Last 3 Years Tax Returns – Borrower", required: true, keywords: [
+        ["form 1040",W3], ["1040",W3], ["personal tax return",W3], ["ptr",W3],
+        ["agi",W2], ["adjusted gross income",W2], ["tax return",W2],
+        ["individual tax",W1],
+      ]},
+      { id: "resi_credit_reports", label: "Credit Reports", required: true, keywords: [
+        ["credit report",W3], ["fico score",W3], ["tri-merge",W3], ["credit score",W3],
+        ["equifax",W2], ["experian",W2], ["transunion",W2],
+        ["fico",W1],
+      ]},
+      { id: "resi_note_title", label: "Note and Title", required: true, keywords: [
+        ["promissory note",W3], ["deed of trust",W3], ["title insurance",W3], ["title commitment",W3],
+        ["mortgage note",W2], ["title search",W2],
+        ["note date",W1], ["title",W1],
+      ]},
+      { id: "resi_appraisal", label: "Latest Appraisal", required: true, keywords: [
+        ["urar",W3], ["form 1004",W3], ["residential appraisal",W3], ["fnma appraisal",W3],
+        ["appraised value",W2], ["appraisal",W2], ["as is value",W2],
+        ["valuation",W1],
+      ]},
+      { id: "resi_closing_docs", label: "Closing Documents and Checklist", required: true, keywords: [
+        ["closing disclosure",W3], ["hud-1",W3], ["settlement statement",W3], ["closing checklist",W3],
+        ["closing documents",W2], ["cd form",W2],
+        ["closing",W1], ["settlement",W1],
+      ]},
+      { id: "resi_legal_docs", label: "All Legal Documents", required: true, keywords: [
+        ["security instrument",W3], ["legal document",W3],
+        ["mortgage deed",W2], ["deed",W2], ["lien",W2],
+        ["legal",W1],
+      ]},
+      { id: "resi_income_verify", label: "Verification of Income", required: true, keywords: [
+        ["verification of income",W3], ["voe",W3], ["w-2",W3], ["paystub",W3],
+        ["pay stub",W2], ["employment verification",W2], ["income verification",W2],
+        ["salary",W1], ["wages",W1],
+      ]},
+      { id: "resi_liquidity_verify", label: "Verification of Liquidity", required: true, keywords: [
+        ["verification of deposit",W3], ["vod",W3], ["asset verification",W3],
+        ["bank statement",W2], ["liquid assets",W2], ["funds to close",W2],
+        ["liquidity",W1],
+      ]},
+      { id: "resi_re_taxes", label: "Real Estate Tax / Insurance / Maintenance (subject + OREO)", required: true, keywords: [
+        ["real estate tax",W3], ["hazard insurance",W3], ["property tax bill",W3],
+        ["property tax",W2], ["homeowners insurance",W2], ["oreo",W2],
+        ["insurance",W1], ["maintenance",W1],
+      ]},
+      { id: "resi_condo", label: "Condo Approval Information (if applicable)", required: false, keywords: [
+        ["condo questionnaire",W3], ["hoa approval",W3], ["condominium rider",W3],
+        ["hoa",W2], ["homeowners association",W2], ["condo",W2],
+      ]},
+      { id: "resi_application", label: "Signed Application", required: true, keywords: [
+        ["urla",W3], ["form 1003",W3], ["uniform residential loan application",W3],
+        ["signed application",W2], ["loan application",W2], ["1003",W2],
+        ["application",W1],
+      ]},
+      { id: "resi_appraisal_review", label: "Appraisal Review", required: true, keywords: [
+        ["appraisal review",W3], ["desk review",W3], ["field review",W3], ["amc review",W3],
+        ["review appraisal",W2],
+      ]},
+      { id: "resi_business_returns", label: "3 Years Business Returns (if applicable)", required: false, keywords: [
+        ["form 1120",W3], ["form 1065",W3], ["business tax return",W3],
+        ["schedule c",W2], ["corporate return",W2],
+        ["business return",W1],
+      ]},
+      { id: "resi_leases", label: "Leases on OREO (if needed)", required: false, keywords: [
+        ["oreo lease",W3], ["lease agreement",W2], ["rental agreement",W2],
+        ["lease",W1],
+      ]},
     ],
   },
   Leveraged: {
     label: "Leveraged Loan",
     color: "#E8622A",
     items: [
-      { id: "lev_account_history",    label: "Borrower Account History (outstanding, payments, delinquencies)", required: true,  keywords: ["account history","payment history","pay history","delinquency","outstanding","ttm"] },
-      { id: "lev_credit_proposal",    label: "Original & Latest Bank Credit Proposal / Annual Review", required: true,  keywords: ["credit proposal","credit analysis","annual review","underwriting","uw memo","credit memo"] },
-      { id: "lev_committee",          label: "Latest Credit Committee Approval", required: true,  keywords: ["credit committee","committee approval","loan approval","approval memo"] },
-      { id: "lev_collateral_val",     label: "Recent Collateral Valuations", required: false, keywords: ["collateral valuation","appraisal","equipment appraisal"] },
-      { id: "lev_abl_docs",           label: "Field Audit / Receivable Aging / Borrowing Base Certificate (if ABL)", required: false, keywords: ["field audit","receivable aging","borrowing base","bbc","abl"] },
-      { id: "lev_projections",        label: "Financial Projections / Budgets", required: false, keywords: ["projection","budget","pro forma","proforma","forecast"] },
-      { id: "lev_fin_statements",     label: "Last 3 Years Financial Statements (Annual + Interim, 10K, 10Q, CTR)", required: true,  keywords: ["financial statement","10k","10q","ctr","annual","interim","audited","fiscal"] },
-      { id: "lev_covenant",           label: "Covenant Compliance Statement / Global Debt Service", required: true,  keywords: ["covenant compliance","covenant certificate","global debt service","gdscr","compliance statement"] },
-      { id: "lev_third_party",        label: "Third-Party Rating Inputs", required: false, keywords: ["third party rating","risk rating input","rating agency"] },
-      { id: "lev_info_memo",          label: "Information Memorandum (syndicated, past 24 months)", required: false, keywords: ["information memorandum","syndicated","info memo"] },
-      { id: "lev_quarterly_stmts",    label: "Quarterly Financial Statements", required: true,  keywords: ["quarterly","q1","q2","q3","q4","quarterly financial","quarterly statement","10q"] },
-      { id: "lev_quarterly_analysis", label: "Quarterly Bank Financial Analysis", required: true,  keywords: ["quarterly analysis","quarterly bank","quarterly review","bank analysis"] },
+      { id: "lev_account_history", label: "Borrower Account History (outstanding, payments, delinquencies)", required: true, keywords: [
+        ["account history",W3], ["payment history",W3], ["pay history",W3],
+        ["delinquency",W2], ["ttm",W2], ["as agreed",W2],
+      ]},
+      { id: "lev_credit_proposal", label: "Original & Latest Bank Credit Proposal / Annual Review", required: true, keywords: [
+        ["annual review",W3], ["credit analysis",W3], ["credit proposal",W3],
+        ["uw memo",W3], ["credit memo",W2], ["underwriting",W1],
+      ]},
+      { id: "lev_committee", label: "Latest Credit Committee Approval", required: true, keywords: [
+        ["credit committee",W3], ["committee approval",W3],
+        ["loan approval",W2], ["approval memo",W2],
+      ]},
+      { id: "lev_collateral_val", label: "Recent Collateral Valuations", required: false, keywords: [
+        ["collateral valuation",W3], ["enterprise value",W3],
+        ["equipment appraisal",W2], ["collateral value",W2],
+      ]},
+      { id: "lev_abl_docs", label: "Field Audit / Receivable Aging / Borrowing Base Certificate (if ABL)", required: false, keywords: [
+        ["field audit",W3], ["borrowing base certificate",W3], ["bbc",W3],
+        ["receivable aging",W2], ["abl",W2], ["borrowing base",W2],
+      ]},
+      { id: "lev_projections", label: "Financial Projections / Budgets", required: false, keywords: [
+        ["financial projections",W3], ["pro forma",W3], ["lbo model",W3],
+        ["budget",W2], ["forecast",W2], ["proforma",W1],
+      ]},
+      { id: "lev_fin_statements", label: "Last 3 Years Financial Statements (Annual + Interim, 10K, 10Q, CTR)", required: true, keywords: [
+        ["audited financial",W3], ["10-k",W3], ["10k",W3], ["10-q",W3],
+        ["financial statement",W2], ["interim statement",W2], ["ctr",W2],
+        ["balance sheet",W1], ["fiscal",W1],
+      ]},
+      { id: "lev_covenant", label: "Covenant Compliance Statement / Global Debt Service", required: true, keywords: [
+        ["global debt service",W3], ["gdscr",W3], ["leverage covenant",W3],
+        ["covenant compliance",W2], ["compliance certificate",W2],
+        ["waiver",W1], ["amendment",W1],
+      ]},
+      { id: "lev_third_party", label: "Third-Party Rating Inputs", required: false, keywords: [
+        ["third party rating",W3], ["moody",W3], ["s&p rating",W3],
+        ["rating agency",W2], ["credit rating",W2],
+      ]},
+      { id: "lev_info_memo", label: "Information Memorandum (syndicated, past 24 months)", required: false, keywords: [
+        ["information memorandum",W3], ["confidential information memorandum",W3], ["cim",W3],
+        ["syndicated",W2], ["lead arranger",W2], ["info memo",W2],
+      ]},
+      { id: "lev_quarterly_stmts", label: "Quarterly Financial Statements", required: true, keywords: [
+        ["quarterly financial statement",W3], ["quarterly financials",W3], ["10-q",W3],
+        ["quarterly statement",W2], ["q1",W2], ["q2",W2], ["q3",W2], ["q4",W2],
+        ["quarterly",W1],
+      ]},
+      { id: "lev_quarterly_analysis", label: "Quarterly Bank Financial Analysis", required: true, keywords: [
+        ["quarterly bank analysis",W3], ["quarterly credit review",W3],
+        ["quarterly analysis",W2], ["quarterly review",W2], ["bank analysis",W2],
+      ]},
     ],
   },
 };
@@ -90,15 +273,76 @@ const ALL_ITEMS = Object.entries(INVENTORY).flatMap(([type, def]) =>
   def.items.map(item => ({ ...item, loanType: type, loanTypeLabel: def.label }))
 );
 
+// ── Weighted scoring engine ──────────────────────────────────────────────────
+// Scoring rules:
+//   1. Filename matches get 2x weight boost (filenames are intentional labels)
+//   2. Phrase length bonus: longer phrases are more specific (up to +50%)
+//   3. Ambiguity penalty: if runner-up is close, confidence is reduced
+//   4. Anchor-only confidence floor: at least one W3 hit required for High
+//   5. Normalised to 0-100 against item's theoretical max score
 function classifyFile(fileName, content) {
-  const text = (fileName + " " + content).toLowerCase();
-  let best = null, bestScore = 0;
-  for (const item of ALL_ITEMS) {
+  const fileText = fileName.toLowerCase();
+  const bodyText = content.toLowerCase();
+
+  const scores = ALL_ITEMS.map(item => {
     let score = 0;
-    for (const kw of item.keywords) { if (text.includes(kw)) score++; }
-    if (score > bestScore) { bestScore = score; best = item; }
+    let anchorHits = 0;
+
+    for (const [kw, weight] of item.keywords) {
+      const inFile = fileText.includes(kw);
+      const inBody = bodyText.includes(kw);
+      if (!inFile && !inBody) continue;
+
+      // Phrase length bonus: each extra word beyond the first adds 25% (max 50%)
+      const wordCount = kw.trim().split(/\s+/).length;
+      const lengthBonus = Math.min(1.5, 1 + (wordCount - 1) * 0.25);
+
+      // Filename hits count double — filenames are deliberate, high-signal labels
+      const locationMultiplier = inFile ? 2.0 : 1.0;
+
+      score += weight * lengthBonus * locationMultiplier;
+      if (weight === W3) anchorHits++;
+    }
+
+    return { item, score, anchorHits };
+  }).filter(r => r.score > 0)
+    .sort((a, b) => b.score - a.score || b.anchorHits - a.anchorHits);
+
+  if (scores.length === 0) return null;
+
+  const { item: best, score: bestScore, anchorHits } = scores[0];
+
+  // Theoretical max = sum of all weights × max phrase bonus (1.5) × filename boost (2.0)
+  // Use a practical max: sum of W3 weights × 1.5 length bonus (typical best case)
+  const practicalMax = best.keywords.reduce((sum, [kw, w]) => {
+    const words = kw.trim().split(/\s+/).length;
+    return sum + w * Math.min(1.5, 1 + (words - 1) * 0.25) * 2.0;
+  }, 0);
+
+  let confidence = Math.min(100, Math.round((bestScore / practicalMax) * 100));
+
+  // Ambiguity penalty: if runner-up scored within 30% of winner, reduce confidence
+  if (scores.length > 1) {
+    const runnerScore = scores[1].score;
+    const gap = (bestScore - runnerScore) / bestScore;
+    if (gap < 0.30) {
+      // Scale down: a gap of 0% → halve confidence; 30% gap → no penalty
+      const penalty = Math.round((0.30 - gap) / 0.30 * 30);
+      confidence = Math.max(10, confidence - penalty);
+    }
   }
-  return best && bestScore > 0 ? { ...best, confidence: Math.min(100, bestScore * 18) } : null;
+
+  // Must have at least one anchor (W3) hit to be rated High
+  if (anchorHits === 0 && confidence > 55) confidence = 55;
+
+  const confidenceLabel = confidence >= 75 ? "High" : confidence >= 45 ? "Medium" : "Low";
+
+  return {
+    ...best, confidence, confidenceLabel,
+    rawScore: Math.round(bestScore),
+    anchorHits,
+    runnerUp: scores[1] ? scores[1].item.label : null,
+  };
 }
 
 function extractMeta(fileName, content) {
@@ -512,11 +756,33 @@ export default function CEISDocIntel() {
                         </td>
                         <td style={{ padding: "10px 14px" }}>
                           {doc.cls && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <div style={{ width: "52px", height: "5px", background: B.border, borderRadius: "3px", overflow: "hidden" }}>
-                                <div style={{ width: doc.cls.confidence+"%", height: "100%", background: doc.cls.confidence>=70 ? B.green : doc.cls.confidence>=40 ? B.orange : B.red }} />
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <div style={{ width: "60px", height: "5px", background: B.border, borderRadius: "3px", overflow: "hidden" }}>
+                                  <div style={{ width: doc.cls.confidence+"%", height: "100%", background: doc.cls.confidence>=75 ? B.green : doc.cls.confidence>=45 ? B.orange : B.red, transition: "width 0.5s ease" }} />
+                                </div>
+                                <span style={{
+                                  fontSize: "11px", fontWeight: "700",
+                                  color: doc.cls.confidence>=75 ? B.green : doc.cls.confidence>=45 ? B.amber : B.red
+                                }}>
+                                  {doc.cls.confidence}%
+                                </span>
+                                <span style={{
+                                  fontSize: "10px", padding: "1px 6px", borderRadius: "3px", fontWeight: "600",
+                                  background: doc.cls.confidence>=75 ? B.greenBg : doc.cls.confidence>=45 ? "#FFF8EE" : B.redBg,
+                                  color: doc.cls.confidence>=75 ? B.green : doc.cls.confidence>=45 ? B.amber : B.red
+                                }}>
+                                  {doc.cls.confidenceLabel}
+                                </span>
                               </div>
-                              <span style={{ fontSize: "11px", color: B.textLight }}>{doc.cls.confidence}%</span>
+                              <div style={{ fontSize: "10px", color: B.textLight }}>
+                                {doc.cls.anchorHits} anchor hit{doc.cls.anchorHits !== 1 ? "s" : ""}
+                                {doc.cls.runnerUp && (
+                                  <span title={`Runner-up: ${doc.cls.runnerUp}`} style={{ marginLeft: "6px", color: "#c8a050", cursor: "help" }}>
+                                    ⚠ ambiguous
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           )}
                         </td>
